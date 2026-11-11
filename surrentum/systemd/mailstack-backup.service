@@ -1,0 +1,6 @@
+[Unit]
+Description=ListMonk database backup (mail stack)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/listmonk/mailstack/mailstack backup

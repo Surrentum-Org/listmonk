@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly ListMonk backup (after the Stalwart mailbox backup)
+
+[Timer]
+OnCalendar=*-*-* 03:55:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
