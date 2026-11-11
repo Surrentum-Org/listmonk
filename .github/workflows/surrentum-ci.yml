@@ -1,5 +1,5 @@
 name: surrentum-ci
-# Org ruleset needs a check named ci-ok. Runs only our overlay's tests; upstream's own workflows are untouched.
+# Org ruleset needs a check named ci-ok. This fork is public (a public fork cannot be private), so it uses ubuntu-latest, not the self-hosted groups.
 on:
   pull_request:
   push:
@@ -10,7 +10,7 @@ permissions:
 jobs:
   ci-ok:
     name: ci-ok
-    runs-on: [self-hosted, ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
