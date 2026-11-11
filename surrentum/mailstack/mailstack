@@ -1,0 +1,62 @@
+#!/bin/sh
+# mailstack: one control script for ListMonk + Stalwart on the mail host.
+#   up        back up, then apply the overlay, bind ListMonk to Stalwart, start the bridge
+#   health    one check for Stalwart, ListMonk, its database, local submission and the bridge
+#   backup    dump the ListMonk database (and keep 14)
+#   rollback [DUMP]  put the stock ListMonk compose back and, if DUMP is given, restore it
+#   verify    check SPF/DKIM/DMARC of the last test message (public DNS, independent code)
+#   test      send one test campaign (test list only) and print SPF/DKIM/DMARC verdicts
+# Run as root from /opt/listmonk. Prints no secret.
+set -eu
+DIR="${MAILSTACK_DIR:-/opt/listmonk}"
+BK="${MAILSTACK_BACKUPS:-/root/mail-backups/listmonk}"
+cd "$DIR"
+DC="docker compose -f docker-compose.yml -f docker-compose.surrentum.yml"
+
+backup() {
+  mkdir -p "$BK"; chmod 700 "$BK"
+  f="$BK/listmonk-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+  docker exec listmonk-db pg_dump -U listmonk -d listmonk | gzip > "$f"
+  chmod 600 "$f"
+  ls -1t "$BK"/listmonk-*.sql.gz | tail -n +15 | xargs -r rm -f
+  echo "$f"
+}
+
+case "${1:-}" in
+  backup) backup ;;
+  up)
+    f=$(backup); echo "backup: $f"
+    cp -a docker-compose.yml "docker-compose.yml.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+    $DC up -d db
+    python3 "$DIR/mailstack/bind.py"
+    $DC up -d --force-recreate app bridge
+    ;;
+  health)
+    rc=0
+    systemctl is-active --quiet stalwart && echo "stalwart: ok" || { echo "stalwart: DOWN"; rc=1; }
+    docker exec listmonk-db pg_isready -U listmonk >/dev/null && echo "listmonk-db: ok" || { echo "listmonk-db: DOWN"; rc=1; }
+    [ "$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/api/health)" != "000" ] && echo "listmonk: ok" || { echo "listmonk: DOWN"; rc=1; }
+    docker exec listmonk sh -c 'timeout 5 nc -z mail.keffals.gg 465' 2>/dev/null && echo "local submission: ok" || { echo "local submission: DOWN"; rc=1; }
+    [ "$(docker inspect -f '{{.State.Running}}' mailstack-bridge 2>/dev/null)" = "true" ] && echo "bounce bridge: ok" || { echo "bounce bridge: DOWN"; rc=1; }
+    exit $rc ;;
+  rollback)
+    cp -a docker-compose.yml /tmp/.lm-compose-keep >/dev/null 2>&1 || true
+    docker compose -f docker-compose.yml down bridge >/dev/null 2>&1 || true
+    docker rm -f mailstack-bridge >/dev/null 2>&1 || true
+    docker compose -f docker-compose.yml up -d --force-recreate app
+    if [ -n "${2:-}" ]; then
+      docker exec listmonk-db psql -U listmonk -d postgres -c 'drop database listmonk' -c 'create database listmonk'
+      gunzip -c "$2" | docker exec -i listmonk-db psql -U listmonk -d listmonk -q
+      docker restart listmonk
+    fi
+    echo "rolled back (bridge removed, stock compose)" ;;
+  test)
+    docker exec -e MAILSTACK_LISTMONK_URL=http://app:9000 mailstack-bridge python /opt/mailstack/selftest.py ;;
+  verify)
+    ip=$(getent hosts mail.keffals.gg | awk '{print $1}' | head -1)
+    w=$(mktemp -d); docker cp mailstack-bridge:/tmp/test-msg.eml "$w/test-msg.eml"; cp "$DIR/mailstack/verify.py" "$w/"
+    docker run --rm -v "$w":/w python:3.12-alpine@sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7 \
+      sh -c "pip install -q --root-user-action=ignore dkimpy pyspf pynacl dnspython >/dev/null 2>&1; python /w/verify.py $ip"
+    rc=$?; rm -rf "$w"; exit $rc ;;
+  *) sed -n 2,11p "$0"; exit 2 ;;
+esac
