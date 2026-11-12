@@ -1,1 +1,0 @@
-- Pin actions/stale to a commit SHA in the close-stale-issues-and-prs workflow; the org requires SHA-pinned actions, so the scheduled run failed at startup.
