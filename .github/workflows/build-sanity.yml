@@ -7,6 +7,11 @@ on:
         - synchronize
         - reopened
   
+# Cancel superseded PR runs; pushes, schedules and dispatches group by commit and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ startsWith(github.event_name, 'pull_request') }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
