@@ -1,0 +1,1 @@
+- Pin every action in the nightly workflow to a commit SHA; the org requires SHA-pinned actions, so the scheduled run failed at startup.
