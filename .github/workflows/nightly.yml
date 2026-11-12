@@ -47,10 +47,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        run: docker run --privileged --rm tonistiigi/binfmt --install all
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -68,17 +65,15 @@ jobs:
           python-version: "3.x"
 
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Delete existing nightly release
         env:
@@ -97,10 +92,7 @@ jobs:
           LISTMONK_VERSION: nightly-${{ steps.tag.outputs.date }}
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
-        with:
-          version: latest
-          args: release --snapshot --parallelism 1 --clean --config .goreleaser-nightly.yml
+        run: go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --parallelism 1 --clean --config .goreleaser-nightly.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LISTMONK_VERSION: nightly-${{ steps.tag.outputs.date }}
