@@ -21,5 +21,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # No build outputs on GitHub (owner 2026-11-13): Actions artifacts and release assets are refused. Org repos use
+      # Surrentum-Org/.github/actions/no-github-artifacts; this public fork cannot reach that private repo, so it runs
+      # a vendored copy of the same check.
+      - name: no files stored on GitHub
+        run: python3 surrentum/ci/no_github_artifacts.py .
       - run: python3 -m unittest surrentum/tests/test_bounce.py
       - run: sh -n surrentum/mailstack/mailstack
